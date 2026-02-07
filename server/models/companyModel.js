@@ -128,18 +128,49 @@ export const deleteCompanyById = async (companyId) => {
 };
 
 /**
- * Seed companies in bulk (upsert by domain)
+ * Seed companies with their submission history
  */
 export const seedCompanies = async (companiesList) => {
   const results = [];
-  for (const company of companiesList) {
-    const existing = await findCompany(company.domain, company.linkedin_url);
-    if (existing) {
-      results.push({ ...existing, status: 'existing' });
-    } else {
-      const created = await createCompany(company);
-      results.push({ ...created, status: 'created' });
+  for (const entry of companiesList) {
+    const domain = entry.domain || null;
+    const linkedinUrl = entry.linkedin_url || null;
+
+    // Find or create company
+    let company = await findCompany(domain, linkedinUrl);
+    let status = 'existing';
+
+    if (!company) {
+      company = await createCompany({
+        name: entry.name || domain || linkedinUrl,
+        domain,
+        linkedin_url: linkedinUrl,
+      });
+      status = 'created';
     }
+
+    // Create submission records for provided dates
+    const submissions = [];
+    if (entry.english_submitted_at) {
+      const sub = await createCVSubmission({
+        company_id: company.id,
+        cv_type: 'english',
+        job_title: entry.english_job_title || null,
+        submitted_at: entry.english_submitted_at,
+      });
+      submissions.push(sub);
+    }
+    if (entry.german_submitted_at) {
+      const sub = await createCVSubmission({
+        company_id: company.id,
+        cv_type: 'german',
+        job_title: entry.german_job_title || null,
+        submitted_at: entry.german_submitted_at,
+      });
+      submissions.push(sub);
+    }
+
+    results.push({ ...company, status, submissions });
   }
   return results;
 };

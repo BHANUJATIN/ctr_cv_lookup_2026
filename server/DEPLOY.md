@@ -379,14 +379,14 @@ After deploying to any platform:
      ON cv_submissions FOR DELETE USING (true);
    ```
 
-5. **Seed initial companies** (optional):
+5. **Seed initial companies with submission history** (optional):
    ```bash
    curl -X POST https://your-server-url/api/cv/seed \
      -H "Content-Type: application/json" \
      -d '{
        "companies": [
-         {"name": "Google", "domain": "google.com"},
-         {"name": "SAP", "domain": "sap.com"},
+         {"name": "Google", "domain": "google.com", "english_submitted_at": "2026-01-15", "german_submitted_at": "2025-12-01"},
+         {"name": "SAP", "domain": "sap.com", "english_submitted_at": "2026-02-01"},
          {"name": "Siemens", "domain": "siemens.com"}
        ]
      }'

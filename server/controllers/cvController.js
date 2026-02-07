@@ -290,9 +290,9 @@ export const deleteCompany = async (req, res) => {
 };
 
 /**
- * Seed initial companies
+ * Seed initial companies with submission history
  * POST /api/cv/seed
- * Body: { companies: [{ name, domain?, linkedin_url? }] }
+ * Body: { companies: [{ name?, domain?, linkedin_url?, english_submitted_at?, german_submitted_at?, english_job_title?, german_job_title? }] }
  */
 export const seedInitialCompanies = async (req, res) => {
   try {
@@ -304,16 +304,27 @@ export const seedInitialCompanies = async (req, res) => {
       });
     }
 
+    // Validate each entry has at least domain or linkedin_url
+    for (const entry of companies) {
+      if (!entry.domain && !entry.linkedin_url) {
+        return res.status(400).json({
+          error: `Each company must have at least a domain or linkedin_url. Invalid entry: ${JSON.stringify(entry)}`,
+        });
+      }
+    }
+
     const results = await seedCompanies(companies);
 
     const created = results.filter((r) => r.status === 'created').length;
     const existing = results.filter((r) => r.status === 'existing').length;
+    const totalSubmissions = results.reduce((sum, r) => sum + r.submissions.length, 0);
 
     return res.status(201).json({
       success: true,
-      message: `Seeded ${created} new companies, ${existing} already existed`,
+      message: `Seeded ${created} new companies (${existing} already existed), ${totalSubmissions} submission records created`,
       created,
       existing,
+      totalSubmissions,
       companies: results,
     });
   } catch (error) {

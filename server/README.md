@@ -192,7 +192,7 @@ Response:
 
 ### Seed Companies
 
-Add initial companies in bulk. Companies that already exist (matched by domain or LinkedIn URL) are skipped.
+Add initial companies with their CV submission history. Companies that already exist (matched by domain or LinkedIn URL) are not duplicated, but submission records are still created.
 
 ```http
 POST /api/cv/seed
@@ -202,16 +202,19 @@ Content-Type: application/json
   "companies": [
     {
       "name": "Google",
-      "domain": "google.com"
+      "domain": "google.com",
+      "english_submitted_at": "2026-01-15",
+      "german_submitted_at": "2025-12-01"
     },
     {
       "name": "SAP",
       "domain": "sap.com",
-      "linkedin_url": "https://linkedin.com/company/sap"
+      "linkedin_url": "https://linkedin.com/company/sap",
+      "english_submitted_at": "2026-02-01",
+      "english_job_title": "Backend Developer"
     },
     {
       "name": "Siemens",
-      "domain": "siemens.com",
       "linkedin_url": "https://linkedin.com/company/siemens"
     }
   ]
@@ -222,25 +225,33 @@ Response:
 ```json
 {
   "success": true,
-  "message": "Seeded 3 new companies, 0 already existed",
+  "message": "Seeded 3 new companies (0 already existed), 3 submission records created",
   "created": 3,
   "existing": 0,
+  "totalSubmissions": 3,
   "companies": [
     {
       "id": "uuid",
       "name": "Google",
       "domain": "google.com",
-      "linkedin_url": null,
-      "status": "created"
+      "status": "created",
+      "submissions": [
+        { "id": "uuid", "cv_type": "english", "submitted_at": "2026-01-15T00:00:00.000Z" },
+        { "id": "uuid", "cv_type": "german", "submitted_at": "2025-12-01T00:00:00.000Z" }
+      ]
     }
   ]
 }
 ```
 
 Each company object accepts:
-- `name` (required) - Company display name
+- `name` (optional) - Company display name (defaults to domain or LinkedIn URL)
 - `domain` (optional) - Company website domain (e.g. `google.com`)
 - `linkedin_url` (optional) - LinkedIn company page URL
+- `english_submitted_at` (optional) - Date last submitted English CV (e.g. `2026-01-15`)
+- `german_submitted_at` (optional) - Date last submitted German CV
+- `english_job_title` (optional) - Job title for the English submission
+- `german_job_title` (optional) - Job title for the German submission
 
 At least one of `domain` or `linkedin_url` must be provided per company.
 
@@ -315,16 +326,16 @@ Delete a company:
 curl -X DELETE http://localhost:3001/api/cv/companies/<company-uuid>
 ```
 
-Seed initial companies:
+Seed companies with submission history:
 ```bash
 curl -X POST http://localhost:3001/api/cv/seed \
   -H "Content-Type: application/json" \
   -d '{
     "companies": [
-      {"name": "Google", "domain": "google.com"},
-      {"name": "SAP", "domain": "sap.com", "linkedin_url": "https://linkedin.com/company/sap"},
+      {"name": "Google", "domain": "google.com", "english_submitted_at": "2026-01-15", "german_submitted_at": "2025-12-01"},
+      {"name": "SAP", "domain": "sap.com", "english_submitted_at": "2026-02-01", "english_job_title": "Backend Developer"},
       {"name": "Siemens", "domain": "siemens.com"},
-      {"name": "BMW", "domain": "bmw.com"},
+      {"name": "BMW", "domain": "bmw.com", "german_submitted_at": "2026-01-20"},
       {"name": "Deutsche Bank", "domain": "db.com"}
     ]
   }'
