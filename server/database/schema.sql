@@ -64,6 +64,10 @@ CREATE POLICY "Allow public update access on companies"
   ON companies FOR UPDATE
   USING (true);
 
+CREATE POLICY "Allow public delete access on companies"
+  ON companies FOR DELETE
+  USING (true);
+
 CREATE POLICY "Allow public read access on cv_submissions"
   ON cv_submissions FOR SELECT
   USING (true);
@@ -74,6 +78,10 @@ CREATE POLICY "Allow public insert access on cv_submissions"
 
 CREATE POLICY "Allow public update access on cv_submissions"
   ON cv_submissions FOR UPDATE
+  USING (true);
+
+CREATE POLICY "Allow public delete access on cv_submissions"
+  ON cv_submissions FOR DELETE
   USING (true);
 
 -- Insert some sample data (optional - for testing)
