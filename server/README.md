@@ -130,6 +130,68 @@ Response:
 }
 ```
 
+### Check and Submit (Atomic)
+
+Checks if **both** English and German CVs are outside the 60-day cooldown for a company. If both are eligible, creates submission records for both with today's date in a single operation. If either is still in cooldown, nothing is updated.
+
+```http
+POST /api/cv/check-and-submit
+Content-Type: application/json
+
+{
+  "domain": "example.com",           // Optional (provide domain OR linkedinUrl)
+  "linkedinUrl": "https://...",      // Optional (provide domain OR linkedinUrl)
+  "companyName": "Example Corp",     // Optional
+  "jobTitle": "Software Engineer"    // Optional
+}
+```
+
+Response when eligible (`canGenerateCV: true`) - both records created:
+```json
+{
+  "canGenerateCV": true,
+  "company": {
+    "id": "uuid",
+    "name": "Example Corp",
+    "domain": "example.com",
+    "linkedinUrl": null
+  },
+  "english": {
+    "submissionId": "uuid",
+    "submittedAt": "2026-02-08T..."
+  },
+  "german": {
+    "submissionId": "uuid",
+    "submittedAt": "2026-02-08T..."
+  }
+}
+```
+
+Response when not eligible (`canGenerateCV: false`) - nothing updated:
+```json
+{
+  "canGenerateCV": false,
+  "company": {
+    "id": "uuid",
+    "name": "Example Corp",
+    "domain": "example.com",
+    "linkedinUrl": null
+  },
+  "english": {
+    "lastSubmittedAt": "2026-01-15T...",
+    "daysRemaining": 37,
+    "canSubmit": false,
+    "nextAvailableDate": "2026-03-16T..."
+  },
+  "german": {
+    "lastSubmittedAt": null,
+    "daysRemaining": 0,
+    "canSubmit": true,
+    "nextAvailableDate": "2026-02-08T..."
+  }
+}
+```
+
 ### Get All Companies
 
 Retrieve all companies with their submission history.
@@ -314,6 +376,13 @@ Submit CV:
 curl -X POST http://localhost:3001/api/cv/submit \
   -H "Content-Type: application/json" \
   -d '{"domain":"example.com","cvType":"english","jobTitle":"Software Engineer"}'
+```
+
+Check and submit both CVs (atomic):
+```bash
+curl -X POST http://localhost:3001/api/cv/check-and-submit \
+  -H "Content-Type: application/json" \
+  -d '{"domain":"example.com","jobTitle":"Software Engineer"}'
 ```
 
 Get all companies:

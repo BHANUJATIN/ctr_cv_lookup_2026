@@ -2,6 +2,7 @@ import express from 'express';
 import {
   checkCVEligibility,
   saveCVSubmission,
+  checkAndSubmit,
   getAllCompanies,
   deleteCompany,
   seedInitialCompanies,
@@ -13,6 +14,7 @@ const router = express.Router();
 // Apply queue middleware to check and submit endpoints to prevent race conditions
 router.post('/check', queueMiddleware(checkCVEligibility));
 router.post('/submit', queueMiddleware(saveCVSubmission));
+router.post('/check-and-submit', queueMiddleware(checkAndSubmit));
 
 // Get all companies (no queue needed for read operations)
 router.get('/companies', getAllCompanies);

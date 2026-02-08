@@ -262,6 +262,110 @@ export const getAllCompanies = async (req, res) => {
 };
 
 /**
+ * Atomic check + submit for both English and German CVs
+ * POST /api/cv/check-and-submit
+ * Body: { domain?, linkedinUrl?, companyName?, jobTitle? }
+ *
+ * Checks if BOTH English and German CVs are outside the 60-day cooldown.
+ * If yes, creates submission records for both with today's date.
+ * If no, returns canGenerateCV: false with details on which CV is still in cooldown.
+ */
+export const checkAndSubmit = async (req, res) => {
+  try {
+    const { domain, linkedinUrl, companyName, jobTitle } = req.body;
+
+    if (!domain && !linkedinUrl) {
+      return res.status(400).json({
+        error: 'Either domain or linkedinUrl must be provided',
+      });
+    }
+
+    const company = await getOrCreateCompany(domain, linkedinUrl, companyName);
+
+    // Check both CV types
+    const latestEnglish = await getLatestCVSubmission(company.id, 'english');
+    const latestGerman = await getLatestCVSubmission(company.id, 'german');
+
+    const canSubmitEnglish = canSubmitCV(latestEnglish?.submitted_at, COOLDOWN_DAYS);
+    const canSubmitGerman = canSubmitCV(latestGerman?.submitted_at, COOLDOWN_DAYS);
+    const canGenerate = canSubmitEnglish && canSubmitGerman;
+
+    const englishInfo = latestEnglish
+      ? {
+          lastSubmittedAt: latestEnglish.submitted_at,
+          daysRemaining: daysUntilNextSubmission(latestEnglish.submitted_at, COOLDOWN_DAYS),
+          canSubmit: canSubmitEnglish,
+          nextAvailableDate: getNextSubmissionDate(latestEnglish.submitted_at, COOLDOWN_DAYS),
+        }
+      : { lastSubmittedAt: null, daysRemaining: 0, canSubmit: true, nextAvailableDate: new Date() };
+
+    const germanInfo = latestGerman
+      ? {
+          lastSubmittedAt: latestGerman.submitted_at,
+          daysRemaining: daysUntilNextSubmission(latestGerman.submitted_at, COOLDOWN_DAYS),
+          canSubmit: canSubmitGerman,
+          nextAvailableDate: getNextSubmissionDate(latestGerman.submitted_at, COOLDOWN_DAYS),
+        }
+      : { lastSubmittedAt: null, daysRemaining: 0, canSubmit: true, nextAvailableDate: new Date() };
+
+    if (!canGenerate) {
+      return res.json({
+        canGenerateCV: false,
+        company: {
+          id: company.id,
+          name: company.name,
+          domain: company.domain,
+          linkedinUrl: company.linkedin_url,
+        },
+        english: englishInfo,
+        german: germanInfo,
+      });
+    }
+
+    // Both are eligible — create submission records for today
+    const now = new Date().toISOString();
+
+    const englishSubmission = await createCVSubmission({
+      company_id: company.id,
+      cv_type: 'english',
+      job_title: jobTitle || null,
+      submitted_at: now,
+    });
+
+    const germanSubmission = await createCVSubmission({
+      company_id: company.id,
+      cv_type: 'german',
+      job_title: jobTitle || null,
+      submitted_at: now,
+    });
+
+    return res.status(201).json({
+      canGenerateCV: true,
+      company: {
+        id: company.id,
+        name: company.name,
+        domain: company.domain,
+        linkedinUrl: company.linkedin_url,
+      },
+      english: {
+        submissionId: englishSubmission.id,
+        submittedAt: englishSubmission.submitted_at,
+      },
+      german: {
+        submissionId: germanSubmission.id,
+        submittedAt: germanSubmission.submitted_at,
+      },
+    });
+  } catch (error) {
+    console.error('Error in check-and-submit:', error);
+    return res.status(500).json({
+      error: 'Internal server error',
+      message: error.message,
+    });
+  }
+};
+
+/**
  * Delete a company and all its submissions
  * DELETE /api/cv/companies/:id
  */
@@ -295,43 +399,39 @@ export const deleteCompany = async (req, res) => {
  * Body: { companies: [{ name?, domain?, linkedin_url?, english_submitted_at?, german_submitted_at?, english_job_title?, german_job_title? }] }
  */
 export const seedInitialCompanies = async (req, res) => {
-  try {
-    const { companies } = req.body;
+  const { companies } = req.body;
 
-    if (!companies || !Array.isArray(companies) || companies.length === 0) {
-      return res.status(400).json({
-        error: 'companies array is required and must not be empty',
-      });
-    }
-
-    // Validate each entry has at least domain or linkedin_url
-    for (const entry of companies) {
-      if (!entry.domain && !entry.linkedin_url) {
-        return res.status(400).json({
-          error: `Each company must have at least a domain or linkedin_url. Invalid entry: ${JSON.stringify(entry)}`,
-        });
-      }
-    }
-
-    const results = await seedCompanies(companies);
-
-    const created = results.filter((r) => r.status === 'created').length;
-    const existing = results.filter((r) => r.status === 'existing').length;
-    const totalSubmissions = results.reduce((sum, r) => sum + r.submissions.length, 0);
-
-    return res.status(201).json({
-      success: true,
-      message: `Seeded ${created} new companies (${existing} already existed), ${totalSubmissions} submission records created`,
-      created,
-      existing,
-      totalSubmissions,
-      companies: results,
-    });
-  } catch (error) {
-    console.error('Error seeding companies:', error);
-    return res.status(500).json({
-      error: 'Internal server error',
-      message: error.message,
+  if (!companies || !Array.isArray(companies) || companies.length === 0) {
+    return res.status(400).json({
+      error: 'companies array is required and must not be empty',
     });
   }
+
+  // Validate each entry has at least domain or linkedin_url
+  for (const entry of companies) {
+    if (!entry.domain && !entry.linkedin_url) {
+      return res.status(400).json({
+        error: `Each company must have at least a domain or linkedin_url. Invalid entry: ${JSON.stringify(entry)}`,
+      });
+    }
+  }
+
+  // Respond immediately, process in background
+  res.status(200).json({
+    success: true,
+    message: 'Seeding queued',
+    count: companies.length,
+  });
+
+  // Process seeding in the background
+  seedCompanies(companies)
+    .then((results) => {
+      const created = results.filter((r) => r.status === 'created').length;
+      const existing = results.filter((r) => r.status === 'existing').length;
+      const totalSubmissions = results.reduce((sum, r) => sum + r.submissions.length, 0);
+      console.log(`Seed complete: ${created} created, ${existing} existing, ${totalSubmissions} submissions`);
+    })
+    .catch((error) => {
+      console.error('Error seeding companies:', error);
+    });
 };
